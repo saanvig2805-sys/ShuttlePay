@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import ShuttleMap from '@/components/ShuttleMap';
 import SearchPanel from '@/components/SearchPanel';
 import CreditsPanel from '@/components/CreditsPanel';
@@ -11,6 +11,7 @@ import {
 } from '@/data/shuttleData';
 import type { Shuttle, ShuttleRoute, Ride } from '@/types';
 import { getStudentCredits, getRideHistory } from '@/lib/api';
+import { mlEngine, findStopByName, type MLPrediction } from '@/lib/ml';
 
 interface Page1Props {
   onSelectShuttle: (shuttle: Shuttle, origin: string, destination: string) => void;
@@ -64,7 +65,6 @@ export default function Page1({ onSelectShuttle }: Page1Props) {
           setOrigin('Current Location');
         },
         () => {
-          // Fallback to campus center with slight offset
           setUserLocation(CAMPUS_CENTER);
           setOrigin('Current Location');
         },
@@ -82,7 +82,6 @@ export default function Page1({ onSelectShuttle }: Page1Props) {
     _time: string,
     _leavingNow: boolean
   ) => {
-    // Find routes that have stops matching origin or destination
     const matchingRoutes = shuttleRoutes.filter(
       (route) =>
         route.stops.some(
@@ -95,7 +94,6 @@ export default function Page1({ onSelectShuttle }: Page1Props) {
     const routes = matchingRoutes.length > 0 ? matchingRoutes : shuttleRoutes;
     setHighlightRoutes(routes);
 
-    // Find shuttles on matching routes
     const matching = shuttles.filter((s) =>
       routes.some((r) => r.id === s.routeId)
     );
@@ -108,6 +106,36 @@ export default function Page1({ onSelectShuttle }: Page1Props) {
     setAvailableShuttles([]);
     setHighlightRoutes([]);
   };
+
+  // Compute ML predictions for available shuttles
+  const { predictions, recommendedShuttleId } = useMemo(() => {
+    const preds = new Map<string, MLPrediction>();
+    if (!hasSearched || !mlEngine.isTrained() || availableShuttles.length === 0) {
+      return { predictions: preds, recommendedShuttleId: null };
+    }
+
+    // Find origin and destination stops on the highlighted routes
+    let originStop = null;
+    let destStop = null;
+    for (const route of highlightRoutes) {
+      if (!originStop) originStop = findStopByName(route, origin);
+      if (!destStop) destStop = findStopByName(route, destination);
+    }
+
+    let bestScore = -1;
+    let bestId: string | null = null;
+
+    for (const shuttle of availableShuttles) {
+      const pred = mlEngine.predictForShuttle(shuttle, userLocation, originStop, destStop);
+      preds.set(shuttle.id, pred);
+      if (pred.recommendation && pred.recommendation.score > bestScore) {
+        bestScore = pred.recommendation.score;
+        bestId = shuttle.id;
+      }
+    }
+
+    return { predictions: preds, recommendedShuttleId: bestId };
+  }, [hasSearched, availableShuttles, highlightRoutes, origin, destination, userLocation]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-slate-950">
@@ -144,6 +172,8 @@ export default function Page1({ onSelectShuttle }: Page1Props) {
         <ShuttleListBar
           shuttles={availableShuttles}
           onSelectShuttle={(s) => onSelectShuttle(s, origin, destination)}
+          predictions={predictions}
+          recommendedShuttleId={recommendedShuttleId}
         />
       )}
     </div>

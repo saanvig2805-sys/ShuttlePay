@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import ShuttleMap from '@/components/ShuttleMap';
 import { advanceShuttle } from '@/data/shuttleData';
 import type { Shuttle } from '@/types';
@@ -17,10 +17,15 @@ import {
   Hash,
   AlertCircle,
   PartyPopper,
+  Brain,
+  TrendingUp,
+  Activity,
+  Gauge,
 } from 'lucide-react';
 import { deductCreditsForRide, recordRide, getStudentCredits } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { RIDE_COST } from '@/data/shuttleData';
+import { mlEngine, findStopByName, type MLPrediction } from '@/lib/ml';
 
 interface Page2Props {
   shuttle: Shuttle;
@@ -98,6 +103,16 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
   };
 
   const pickupStop = currentShuttle.route.stops[0];
+
+  // Compute ML prediction for this shuttle
+  const mlPrediction: MLPrediction | null = useMemo(() => {
+    if (!mlEngine.isTrained()) return null;
+
+    const originStop = findStopByName(currentShuttle.route, origin) ?? null;
+    const destStop = findStopByName(currentShuttle.route, destination) ?? null;
+
+    return mlEngine.predictForShuttle(currentShuttle, null, originStop, destStop);
+  }, [currentShuttle, origin, destination]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-slate-950 flex">
@@ -217,6 +232,80 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
           </div>
         </div>
 
+        {/* ML Predictions */}
+        {mlPrediction && (
+          <div className="px-5 py-4 border-b border-slate-700/50 bg-gradient-to-b from-red-500/5 to-transparent">
+            <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <Brain className="w-3.5 h-3.5" />
+              ML Predictions
+            </h3>
+
+            {/* Predicted ETA */}
+            <div className="bg-slate-800/40 rounded-lg p-3 mb-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Gauge className="w-3.5 h-3.5 text-red-400" />
+                  <span className="text-[11px] text-slate-500">AI-Predicted ETA</span>
+                </div>
+                <span className="text-lg font-bold text-white tabular-nums">
+                  {mlPrediction.etaMinutes}<span className="text-xs text-slate-500 font-normal ml-1">min</span>
+                </span>
+              </div>
+              {/* Confidence bar */}
+              <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full"
+                  style={{ width: `${mlPrediction.confidence * 100}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] text-slate-500">Confidence</span>
+                <span className="text-[10px] text-slate-400 font-medium tabular-nums">
+                  {Math.round(mlPrediction.confidence * 100)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Demand forecast */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="bg-slate-800/40 rounded-lg p-2.5">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <TrendingUp className="w-3 h-3 text-amber-400" />
+                  <span className="text-[10px] text-slate-500">At Pickup</span>
+                </div>
+                <p className="text-sm font-semibold text-white">
+                  {mlPrediction.demandAtPickup}<span className="text-[10px] text-slate-500 font-normal ml-1">waiting</span>
+                </p>
+              </div>
+              <div className="bg-slate-800/40 rounded-lg p-2.5">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <Activity className="w-3 h-3 text-blue-400" />
+                  <span className="text-[10px] text-slate-500">At Dropoff</span>
+                </div>
+                <p className="text-sm font-semibold text-white">
+                  {mlPrediction.demandAtDropoff}<span className="text-[10px] text-slate-500 font-normal ml-1">waiting</span>
+                </p>
+              </div>
+            </div>
+
+            {/* AI recommendation reasons */}
+            {mlPrediction.recommendation && mlPrediction.recommendation.reasons.length > 0 && (
+              <div className="mt-2.5 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Brain className="w-3 h-3 text-red-400" />
+                  <span className="text-[10px] font-medium text-red-400">Why this shuttle?</span>
+                </div>
+                {mlPrediction.recommendation.reasons.map((reason, idx) => (
+                  <div key={idx} className="flex items-start gap-1.5 mb-0.5">
+                    <div className="w-1 h-1 rounded-full bg-red-400 mt-1.5 flex-shrink-0" />
+                    <span className="text-[11px] text-slate-300">{reason}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Shuttle stats */}
         <div className="px-5 py-4 border-b border-slate-700/50">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Shuttle Info</h3>
@@ -226,7 +315,9 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                 <span className="text-[11px] text-slate-500">ETA</span>
               </div>
-              <p className="text-sm font-semibold text-white">{currentShuttle.etaMinutes} min</p>
+              <p className="text-sm font-semibold text-white">
+                {mlPrediction ? mlPrediction.etaMinutes : currentShuttle.etaMinutes} min
+              </p>
             </div>
             <div className="bg-slate-800/40 rounded-lg p-3">
               <div className="flex items-center gap-1.5 mb-1">
