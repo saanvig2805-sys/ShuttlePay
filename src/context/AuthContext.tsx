@@ -2,12 +2,14 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { ensureStudentProfile } from '@/lib/api';
+import type { UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  role: UserRole;
+  signUp: (email: string, password: string, role: UserRole) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -18,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<UserRole>('student');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -31,7 +34,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
         if (newSession?.user) {
-          await ensureStudentProfile();
+          // Fetch the user's role from the students table
+          const { data: studentData } = await supabase
+            .from('students')
+            .select('role')
+            .maybeSingle();
+          if (studentData?.role) {
+            setRole(studentData.role as UserRole);
+          }
+        } else {
+          setRole('student');
         }
       })();
     });
@@ -41,9 +53,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+  const signUp = async (email: string, password: string, selectedRole: UserRole) => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return { error: error.message };
+
+    if (data.user) {
+      setRole(selectedRole);
+      await ensureStudentProfile(selectedRole);
+    }
+    return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {
@@ -53,10 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setRole('student');
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, role, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

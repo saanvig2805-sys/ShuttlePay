@@ -29,9 +29,12 @@ export interface Shuttle {
   pathPosition: number;
 }
 
+export type UserRole = 'student' | 'teacher';
+
 export interface Student {
   id: string;
   credits: number;
+  role: UserRole;
 }
 
 export interface Ride {

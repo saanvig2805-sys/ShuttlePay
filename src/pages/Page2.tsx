@@ -16,8 +16,10 @@ import {
   User,
   Hash,
   AlertCircle,
+  PartyPopper,
 } from 'lucide-react';
 import { deductCreditsForRide, recordRide, getStudentCredits } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { RIDE_COST } from '@/data/shuttleData';
 
 interface Page2Props {
@@ -31,12 +33,15 @@ interface Page2Props {
 type ScanState = 'idle' | 'scanning' | 'success' | 'error';
 
 export default function Page2({ shuttle, origin, destination, onBack, onRideCompleted }: Page2Props) {
+  const { role } = useAuth();
   const [currentShuttle, setCurrentShuttle] = useState(shuttle);
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [scanError, setScanError] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
 
-  // An shuttle movement
+  const isTeacher = role === 'teacher';
+
+  // Shuttle movement
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentShuttle((prev) => advanceShuttle(prev));
@@ -53,10 +58,9 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
     setScanState('scanning');
     setScanError(null);
 
-    // Simulate QR scan + booking process
     await new Promise((resolve) => setTimeout(resolve, 1800));
 
-    // Deduct credits
+    // Deduct credits (teachers get free rides — handled server-side)
     const deductResult = await deductCreditsForRide(RIDE_COST);
 
     if (!deductResult.success) {
@@ -71,7 +75,7 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
       shuttle_name: currentShuttle.routeName,
       origin,
       destination,
-      credits_spent: RIDE_COST,
+      credits_spent: isTeacher ? 0 : RIDE_COST,
     });
 
     if (!rideResult.success) {
@@ -83,10 +87,9 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
     setCredits(deductResult.newBalance);
     setScanState('success');
 
-    // Notify parent after a delay
     setTimeout(() => {
       onRideCompleted();
-    }, 2500);
+    }, 3500);
   };
 
   const handleRetry = () => {
@@ -94,7 +97,6 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
     setScanError(null);
   };
 
-  // Find the nearest stop as pickup
   const pickupStop = currentShuttle.route.stops[0];
 
   return (
@@ -129,6 +131,44 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
             <span className="text-sm font-semibold text-white">{currentShuttle.routeName}</span>
           </div>
         </div>
+
+        {/* Full-screen success overlay */}
+        {scanState === 'success' && (
+          <div className="absolute inset-0 z-[3000] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center fade-in">
+            <div className="text-center">
+              <div className="relative w-28 h-28 mx-auto mb-6">
+                <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" />
+                <div className="relative w-28 h-28 rounded-full bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center">
+                  <CheckCircle2 className="w-16 h-16 text-emerald-400" strokeWidth={1.5} />
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <PartyPopper className="w-6 h-6 text-emerald-400" />
+                <h2 className="text-2xl font-bold text-white">Ride Confirmed!</h2>
+              </div>
+              <p className="text-slate-400 text-sm mb-4">
+                {isTeacher
+                  ? 'Faculty pass activated. Enjoy your free ride!'
+                  : `${RIDE_COST} credits deducted. Enjoy your trip!`}
+              </p>
+              {!isTeacher && credits !== null && (
+                <div className="inline-flex items-center gap-2 bg-slate-800/60 rounded-full px-4 py-2">
+                  <Coins className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm text-slate-300">Remaining balance: </span>
+                  <span className={`text-sm font-bold ${credits <= 20 ? 'text-red-400' : 'text-amber-400'}`}>
+                    {credits} credits
+                  </span>
+                </div>
+              )}
+              {isTeacher && (
+                <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-full px-4 py-2">
+                  <Coins className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm text-blue-300">Faculty Pass — No charge</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right sidebar */}
@@ -237,13 +277,24 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
         <div className="px-5 py-4 border-b border-slate-700/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Coins className="w-4 h-4 text-amber-400" />
-              <span className="text-sm text-slate-300">Ride Cost</span>
+              <Coins className={`w-4 h-4 ${isTeacher ? 'text-blue-400' : 'text-amber-400'}`} />
+              <span className="text-sm text-slate-300">{isTeacher ? 'Faculty Pass' : 'Ride Cost'}</span>
             </div>
             <div className="text-right">
-              <span className="text-sm font-semibold text-amber-400">{RIDE_COST} credits</span>
-              {credits !== null && (
-                <p className="text-[11px] text-slate-500">Balance: {credits} credits</p>
+              {isTeacher ? (
+                <>
+                  <span className="text-sm font-semibold text-blue-400">Free</span>
+                  <p className="text-[11px] text-slate-500">No charge</p>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm font-semibold text-amber-400">{RIDE_COST} credits</span>
+                  {credits !== null && (
+                    <p className={`text-[11px] ${credits <= 20 ? 'text-red-400 font-medium' : 'text-slate-500'}`}>
+                      Balance: {credits} credits
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -257,7 +308,7 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
               className="w-full flex items-center justify-center gap-2.5 py-4 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-red-500/30"
             >
               <QrCode className="w-5 h-5" />
-              Scan QR to Confirm Ride
+              {isTeacher ? 'Scan QR to Board' : 'Scan QR to Confirm Ride'}
             </button>
           )}
 
@@ -265,7 +316,9 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
             <div className="text-center py-4">
               <Loader2 className="w-8 h-8 text-red-400 mx-auto mb-3 animate-spin" />
               <p className="text-sm text-slate-300">Scanning & confirming booking...</p>
-              <p className="text-xs text-slate-500 mt-1">Deducting {RIDE_COST} credits</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {isTeacher ? 'Activating faculty pass...' : `Deducting ${RIDE_COST} credits`}
+              </p>
             </div>
           )}
 
@@ -274,10 +327,8 @@ export default function Page2({ shuttle, origin, destination, onBack, onRideComp
               <div className="w-14 h-14 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400" />
               </div>
-              <p className="text-sm font-semibold text-white">Ride Confirmed!</p>
-              <p className="text-xs text-slate-400 mt-1">
-                {RIDE_COST} credits deducted. Enjoy your trip!
-              </p>
+              <p className="text-sm font-semibold text-white">All set!</p>
+              <p className="text-xs text-slate-400 mt-1">Redirecting back to map...</p>
             </div>
           )}
 

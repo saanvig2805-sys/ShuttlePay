@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Coins, LogOut, History, X, Clock, MapPin, Bus } from 'lucide-react';
+import { Coins, LogOut, History, X, Clock, MapPin, Bus, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import type { Ride } from '@/types';
 import { RIDE_COST } from '@/data/shuttleData';
@@ -10,29 +10,76 @@ interface CreditsPanelProps {
 }
 
 export default function CreditsPanel({ credits, rideHistory }: CreditsPanelProps) {
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
   const [showHistory, setShowHistory] = useState(false);
+
+  const isTeacher = role === 'teacher';
+  const LOW_CREDIT_THRESHOLD = 20;
+  const isLowCredits = !isTeacher && credits <= LOW_CREDIT_THRESHOLD;
 
   return (
     <>
       <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2 items-end">
         {/* Credits display */}
-        <div className="bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl px-4 py-3 min-w-[180px]">
+        <div
+          className={`backdrop-blur-xl rounded-2xl border shadow-2xl px-4 py-3 min-w-[200px] transition-all ${
+            isTeacher
+              ? 'bg-blue-950/90 border-blue-700/50'
+              : isLowCredits
+              ? 'bg-red-950/90 border-red-500/60'
+              : 'bg-slate-900/90 border-slate-700/50'
+          }`}
+        >
           <div className="flex items-center gap-2 mb-1">
-            <Coins className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Credits</span>
+            {isTeacher ? (
+              <Coins className="w-4 h-4 text-blue-400" />
+            ) : isLowCredits ? (
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+            ) : (
+              <Coins className="w-4 h-4 text-amber-400" />
+            )}
+            <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+              {isTeacher ? 'Faculty Pass' : 'Credits'}
+            </span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white tabular-nums">{credits}</span>
-            <span className="text-xs text-slate-500">{RIDE_COST} per ride</span>
-          </div>
-          {/* Credit bar */}
-          <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min((credits / 100) * 100, 100)}%` }}
-            />
-          </div>
+
+          {isTeacher ? (
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-blue-400">Free</span>
+              <span className="text-xs text-slate-500">unlimited rides</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`text-2xl font-bold tabular-nums ${
+                    isLowCredits ? 'text-red-400' : 'text-white'
+                  }`}
+                >
+                  {credits}
+                </span>
+                <span className="text-xs text-slate-500">{RIDE_COST} per ride</span>
+              </div>
+              {/* Low credits warning */}
+              {isLowCredits && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-red-400 font-medium fade-in">
+                  <AlertTriangle className="w-3 h-3" />
+                  Only {credits} left — recharge soon!
+                </div>
+              )}
+              {/* Credit bar */}
+              <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    isLowCredits
+                      ? 'bg-gradient-to-r from-red-500 to-red-600'
+                      : 'bg-gradient-to-r from-amber-400 to-orange-500'
+                  }`}
+                  style={{ width: `${Math.min((credits / 100) * 100, 100)}%` }}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Action buttons */}

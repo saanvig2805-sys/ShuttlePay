@@ -86,7 +86,7 @@ export default function SearchPanel({
         </div>
 
         <div className="p-4 space-y-3">
-          {/* Origin */}
+          {/* Origin with current location button inside */}
           <div className="relative">
             <label className="block text-[11px] font-medium text-slate-400 mb-1">From</label>
             <div className="relative">
@@ -101,8 +101,16 @@ export default function SearchPanel({
                 onFocus={() => setShowOriginSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowOriginSuggestions(false), 150)}
                 placeholder="Starting point"
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all"
+                className="w-full pl-9 pr-10 py-2.5 bg-slate-800/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 transition-all"
               />
+              {/* Current location button inside the From field */}
+              <button
+                onClick={onUseCurrentLocation}
+                title="Use current location"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-emerald-400 transition-colors"
+              >
+                <LocateFixed className="w-4 h-4" />
+              </button>
             </div>
             {showOriginSuggestions && filteredOrigin.length > 0 && (
               <div className="absolute z-[1001] mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-40 overflow-y-auto">
@@ -193,15 +201,6 @@ export default function SearchPanel({
               </button>
             </div>
           </div>
-
-          {/* Current location button */}
-          <button
-            onClick={onUseCurrentLocation}
-            className="w-full flex items-center justify-center gap-2 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors"
-          >
-            <LocateFixed className="w-3.5 h-3.5" />
-            Use current location as origin
-          </button>
 
           {/* Search button */}
           <button

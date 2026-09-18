@@ -1,16 +1,16 @@
 import { supabase } from '@/lib/supabase';
-import type { Ride } from '@/types';
+import type { Ride, UserRole } from '@/types';
 import { RIDE_COST } from '@/data/shuttleData';
 
-export async function ensureStudentProfile() {
-  const { error } = await supabase.rpc('ensure_student_profile');
+export async function ensureStudentProfile(role: UserRole = 'student') {
+  const { error } = await supabase.rpc('ensure_student_profile', { p_role: role });
   if (error) console.error('Failed to ensure student profile:', error);
 }
 
 export async function getStudentCredits(): Promise<number> {
   const { data, error } = await supabase
     .from('students')
-    .select('credits')
+    .select('credits, role')
     .maybeSingle();
 
   if (error) {
@@ -18,6 +18,19 @@ export async function getStudentCredits(): Promise<number> {
     return 0;
   }
   return data?.credits ?? 0;
+}
+
+export async function getStudentRole(): Promise<UserRole> {
+  const { data, error } = await supabase
+    .from('students')
+    .select('role')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch role:', error);
+    return 'student';
+  }
+  return (data?.role as UserRole) ?? 'student';
 }
 
 export async function deductCreditsForRide(amount: number = RIDE_COST): Promise<{ success: boolean; newBalance: number; error: string | null }> {

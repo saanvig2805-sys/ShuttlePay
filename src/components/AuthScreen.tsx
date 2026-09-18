@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Bus, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Bus, Mail, Lock, ArrowRight, Loader2, GraduationCap, Presentation } from 'lucide-react';
+import type { UserRole } from '@/types';
 
 export default function AuthScreen() {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedRole, setSelectedRole] = useState<UserRole>('student');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -16,12 +18,18 @@ export default function AuthScreen() {
     setLoading(true);
     setError(null);
 
-    const fn = mode === 'signin' ? signIn : signUp;
-    const { error: err } = await fn(email, password);
-
-    if (err) {
-      setError(err);
-      setLoading(false);
+    if (mode === 'signin') {
+      const { error: err } = await signIn(email, password);
+      if (err) {
+        setError(err);
+        setLoading(false);
+      }
+    } else {
+      const { error: err } = await signUp(email, password, selectedRole);
+      if (err) {
+        setError(err);
+        setLoading(false);
+      }
     }
   };
 
@@ -48,7 +56,7 @@ export default function AuthScreen() {
         <div className="bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-slate-800 p-8 shadow-2xl">
           <div className="flex gap-2 mb-6 p-1 bg-slate-800/50 rounded-xl">
             <button
-              onClick={() => setMode('signin')}
+              onClick={() => { setMode('signin'); setError(null); }}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 mode === 'signin'
                   ? 'bg-slate-700 text-white shadow-lg'
@@ -58,7 +66,7 @@ export default function AuthScreen() {
               Sign In
             </button>
             <button
-              onClick={() => setMode('signup')}
+              onClick={() => { setMode('signup'); setError(null); }}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 mode === 'signup'
                   ? 'bg-slate-700 text-white shadow-lg'
@@ -68,6 +76,43 @@ export default function AuthScreen() {
               Sign Up
             </button>
           </div>
+
+          {/* Role selector - only on signup */}
+          {mode === 'signup' && (
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-slate-400 mb-2">I am a</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setSelectedRole('student')}
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all ${
+                    selectedRole === 'student'
+                      ? 'bg-red-500/10 border-red-500/50 text-white'
+                      : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                  }`}
+                >
+                  <GraduationCap className={`w-5 h-5 ${selectedRole === 'student' ? 'text-red-400' : 'text-slate-500'}`} />
+                  <div className="text-left">
+                    <div className="text-sm font-medium">Student</div>
+                    <div className="text-[10px] text-slate-500">20 credits/ride</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setSelectedRole('teacher')}
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all ${
+                    selectedRole === 'teacher'
+                      ? 'bg-blue-500/10 border-blue-500/50 text-white'
+                      : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                  }`}
+                >
+                  <Presentation className={`w-5 h-5 ${selectedRole === 'teacher' ? 'text-blue-400' : 'text-slate-500'}`} />
+                  <div className="text-left">
+                    <div className="text-sm font-medium">Teacher</div>
+                    <div className="text-[10px] text-slate-500">Free rides</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -138,7 +183,11 @@ export default function AuthScreen() {
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">
-          New accounts start with 100 credits. Each ride costs 20.
+          {mode === 'signup' && selectedRole === 'student'
+            ? 'New student accounts start with 100 credits. Each ride costs 20.'
+            : mode === 'signup' && selectedRole === 'teacher'
+            ? 'Teachers ride free with unlimited access.'
+            : 'Students: 100 credits to start, 20 per ride. Teachers ride free.'}
         </p>
       </div>
     </div>
